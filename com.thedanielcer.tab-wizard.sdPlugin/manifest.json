@@ -1,0 +1,132 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Tab Wizard",
+	"Version": "1.0.0.0",
+	"Author": "thedanielcer",
+	"Actions": [
+		{
+			"Icon": "icons/tabAction",
+			"Name": "Tab Keys",
+			"States": [
+				{
+					"Image": "icons/tabAction",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Display and focus browser tab",
+			"UUID": "com.thedanielcer.tab-wizard.tabs-on-keys",
+			"Controllers": [
+				"Keypad"
+			]
+		},
+		{
+			"Icon": "icons/closeAction",
+			"Name": "Close Tab",
+			"States": [
+				{
+					"Image": "icons/closeAction",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Close browser tab",
+			"UUID": "com.thedanielcer.tab-wizard.close-tab",
+			"Controllers": [
+				"Keypad"
+			]
+		},
+		{
+			"Icon": "icons/switchProfile",
+			"Name": "Switch Profile",
+			"States": [
+				{
+					"Image": "icons/switchProfile",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Switch between personal and work profiles",
+			"UUID": "com.thedanielcer.tab-wizard.switch-profile",
+			"Controllers": [
+				"Keypad"
+			]
+		},
+		{
+			"Icon": "icons/nextPage",
+			"Name": "Next Page",
+			"States": [
+				{
+					"Image": "icons/nextPage",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Switch to next page",
+			"UUID": "com.thedanielcer.tab-wizard.next-page",
+			"Controllers": [
+				"Keypad"
+			]
+		},
+		{
+			"Icon": "icons/previousPage",
+			"Name": "Previous Page",
+			"States": [
+				{
+					"Image": "icons/previousPage",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Switch to previous page",
+			"UUID": "com.thedanielcer.tab-wizard.previous-page",
+			"Controllers": [
+				"Keypad"
+			]
+		},
+		{
+			"Icon": "icons/pageCounter",
+			"Name": "Page Counter",
+			"States": [
+				{
+					"Image": "icons/pageCounter",
+					"TitleAlignment": "middle",
+					"ShowTitle": true
+				}
+			],
+			"Tooltip": "Display current page number",
+			"UUID": "com.thedanielcer.tab-wizard.page-setter",
+			"Controllers": [
+				"Keypad"
+			]
+		}
+	],
+	"Category": "Tab Wizard",
+	"CategoryIcon": "icons/categoryIcon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Control and monitor browser tabs across multiple Edge profiles",
+	"Icon": "icons/pluginIcon",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.4"
+	},
+	"OS": [
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"UUID": "com.thedanielcer.tab-wizard",
+	"Profiles": [
+		{
+			"Name": "Tab Wizard",
+			"DeviceType": 2,
+			"Readonly": true,
+			"DontAutoSwitchWhenInstalled": true
+		}
+	]
+}
