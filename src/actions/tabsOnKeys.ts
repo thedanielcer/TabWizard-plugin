@@ -1,6 +1,7 @@
 import { action, Coordinates, JsonObject, KeyDownEvent, Logger, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
-import { BackendConnection, BackendEvent, Tab } from "../backendConnection";
 import { PageSetter } from "./pageSetter";
+import { ConnectionToBrowser } from "../connectionToBrowser";
+import { BrowserTabEvent, Tab } from '../interfaces/tabs.interfaces';
 
 @action({UUID: "com.thedanielcer.tab-wizard.tabs-on-keys"})
 export class TabsOnKeys extends SingletonAction{
@@ -12,22 +13,31 @@ export class TabsOnKeys extends SingletonAction{
     private readonly columnOffset = 1;
     private readonly maxKeysPerPage = 6;
     private readonly logger: Logger;
-    private readonly backend: BackendConnection;
+    private personalBrowserConnection!: ConnectionToBrowser;
+    private workBrowserConnection!: ConnectionToBrowser;
     private readonly priorityDomains = [
         "youtube",
         "chatgpt",
         "github",
     ];
 
-    constructor( logger: Logger, private readonly pageCounter: PageSetter){
+    constructor(logger: Logger, private readonly pageCounter: PageSetter) {
         super();
         this.logger = logger;
-        this.backend = new BackendConnection(logger);
-        this.backend.onEvent((event: BackendEvent) => this.handleBackendEvent(event));
+    }
+
+    public static async create(logger: Logger, pageCounter: PageSetter): Promise<TabsOnKeys> {
+        const instance = new TabsOnKeys(logger, pageCounter);
+        instance.personalBrowserConnection = await ConnectionToBrowser.create("personal");
+        instance.workBrowserConnection = await ConnectionToBrowser.create("work");
+        instance.personalBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
+        instance.workBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
+        return instance;
     }
 
     private getPriority(tab: Tab): [number, number, string] {
         try {
+            if(!tab.url) return [1, 0, ""];
             const url = new URL(tab.url);
             const domain = url.hostname.toLowerCase();
             
@@ -54,7 +64,7 @@ export class TabsOnKeys extends SingletonAction{
         });
     }
 
-    private handleBackendEvent(event: BackendEvent): void {
+    private handleBackendEvent(event: BrowserTabEvent): void {
         // choose appropriate list & setter
         const list = event.profile === "personal" ? this.tabsArrayPersonal : this.tabsArrayWork;
         const setter = (tabs: Tab[]) => {
@@ -63,38 +73,37 @@ export class TabsOnKeys extends SingletonAction{
         };
     
         switch (event.type) {
-            case "current_tabs":
-            this.logger.info(`Set current tabs for ${event.profile}: ${event.tabs.length}`);
-            setter(event.tabs);
+            case "all_tabs":
+                this.logger.info(`Set current tabs for ${event.profile}: ${event.tabs.length}`);
+                setter(event.tabs);
             break;
     
             case "new_tab":
-            this.logger.info(`New tab for ${event.profile}: ${event.tabs[0].tabId}`);
-            setter([...list, event.tabs[0]]);
-            // this.logger.info(`list after event: ${JSON.stringify(this.tabsArrayPersonal)}`);
+                this.logger.info(`New tab for ${event.profile}: ${event.tabs[0].tabId}`);
+                setter([...list, event.tabs[0]]);
+                // this.logger.info(`list after event: ${JSON.stringify(this.tabsArrayPersonal)}`);
             break;
     
             case "tab_closed":
-            this.logger.info(`Tab closed for ${event.profile}: ${event.tabs[0].tabId}`);
-            setter(list.filter((t) => t.tabId !== event.tabs[0].tabId));
-            const maxPersonal = Math.floor((this.tabsArrayPersonal.length - 1) / this.maxKeysPerPage);
-            const maxWork     = Math.floor((this.tabsArrayWork.length - 1) / this.maxKeysPerPage);
-            const maxPage     = Math.max(maxPersonal, maxWork);
-            if(this.page > maxPage) this.page = maxPage;
-            break;
-    
-            case "no_tabs_open":
-            this.logger.info(`No tabs open for ${event.profile}`);
-            setter([]);
+                this.logger.info(`Tab closed for ${event.profile}: ${event.tabs[0].tabId}`);
+                setter(list.filter((t) => t.tabId !== event.tabs[0].tabId));
+                const maxPersonal = Math.floor((this.tabsArrayPersonal.length - 1) / this.maxKeysPerPage);
+                const maxWork     = Math.floor((this.tabsArrayWork.length - 1) / this.maxKeysPerPage);
+                const maxPage     = Math.max(maxPersonal, maxWork);
+                if(this.page > maxPage) this.page = maxPage;
             break;
 
             case "tab_info_change":
                 this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
-                setter(list.map((tab) => tab.tabId === event.tabs[0].tabId ? event.tabs[0] : tab));
+                if(this.isTabInArray(event.tabs[0], list)){
+                    setter(list.map((tab) => tab.tabId === event.tabs[0].tabId ? event.tabs[0] : tab));
+                } else {
+                    setter([...list, event.tabs[0]]);
+                }
                 break;
     
             default:
-            this.logger.info(`Unhandled event: ${event.type}`);
+                this.logger.info(`Unhandled event: ${event.type}`);
             break;
         }
     
@@ -103,6 +112,8 @@ export class TabsOnKeys extends SingletonAction{
 
     override onWillAppear(ev: WillAppearEvent<JsonObject>): Promise<void> | void {
         this.logger.info('onWillAppear happened');
+        this.personalBrowserConnection.giveMeTheTabs();
+        this.workBrowserConnection.giveMeTheTabs();
         if(!ev.action.coordinates) return;
         this.renderPage();
     }
@@ -125,8 +136,9 @@ export class TabsOnKeys extends SingletonAction{
         if(idx < 0 || idx >= list.length) return;
 
         const tab = list[idx]!;
-        const profile = isPersonalRow ? "personal" : "work";
-        this.backend.sendMessage({type: "focus_tab", tabId: tab.tabId, profile: profile});
+        if(!tab.tabId) return;
+        if(isPersonalRow) this.personalBrowserConnection.sendMessage(tab.tabId, "focus_tab");
+        else this.workBrowserConnection.sendMessage(tab.tabId, "focus_tab");
     }
 
     private renderPage(): void {
@@ -151,7 +163,7 @@ export class TabsOnKeys extends SingletonAction{
 
             if (tab) {
                 action.setImage(tab.favicon)
-                action.setTitle(tab.title.slice(0, 10));
+                action.setTitle(tab.title?.slice(0, 10) ?? "");
             } else {
                 action.setImage(""); action.setTitle("");
             }
@@ -192,10 +204,16 @@ export class TabsOnKeys extends SingletonAction{
         const tab = list[idx];
         const profile = isPersonal ? "personal" : "work";
         this.logger.info(`profile: ${profile}`);
-        this.backend.sendMessage({type: "close_tab", tabId: tab.tabId, profile: profile});
+        if(!tab.tabId) return;
+        if(isPersonal) this.personalBrowserConnection.sendMessage(tab.tabId, "close_tab");
+        else this.workBrowserConnection.sendMessage(tab.tabId, "close_tab");
     }
 
     public getPage(): number {
         return this.page;
+    }
+
+    private isTabInArray(tab: Tab, array: Tab[]): boolean {
+        return array.some((t) => t.tabId === tab.tabId);
     }
 }

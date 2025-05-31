@@ -85,7 +85,7 @@ export class BackendConnection {
         for (const fn of this.listeners) fn(event);
     }
 
-    public onEvent(callback: (event: BackendEvent) => void): void {
+    public registerCallback(callback: (event: BackendEvent) => void): void {
         this.listeners.push(callback);
     }
 

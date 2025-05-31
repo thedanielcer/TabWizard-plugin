@@ -1,0 +1,188 @@
+import WebSocket, { CloseEvent, MessageEvent } from "ws";
+import { config } from "./config";
+import axios, { AxiosResponse } from "axios";
+import { BrowserJson } from "./interfaces/browser-json.interface";
+import { TabsFromBrowser } from "./interfaces/tabs-in-browser.interface";
+import { GetTabsBrowserResponse, TabClosedResponse, TabInfoChangedResponse } from "./interfaces/browser-responses.interface";
+import { BrowserTabEvent, Tab } from "./interfaces/tabs.interfaces";
+
+export class ConnectionToBrowser{
+    private socket?: WebSocket;
+    private readonly GET_TABS_ID = parseInt("giveMeTheTabs".split('').reduce((sum, char) => sum + char.charCodeAt(0), 0).toString().slice(0, 5));
+    private readonly CLOSE_TAB_ID = parseInt("closeTab".split('').reduce((sum, char) => sum + char.charCodeAt(0), 0).toString().slice(0, 5));
+    private readonly FOCUS_TAB_ID = parseInt("focusTab".split('').reduce((sum, char) => sum + char.charCodeAt(0), 0).toString().slice(0, 5));
+    private listeners: Array<(event: BrowserTabEvent) => void> = [];
+    private profile: number;
+    private profileName: string;
+    private webSocketUrl?: string;
+
+    private constructor(profile: string) {
+        this.profile = profile === "personal" ? config.debugPortPersonal : config.debugPortWork;
+        this.profileName = profile;
+    }
+
+    public static async create(profile: string): Promise<ConnectionToBrowser> {
+        const instance = new ConnectionToBrowser(profile);
+        instance.startLoop();
+        return instance;
+    }
+
+    private async getBrowserWebSocketUrl(profile: number){
+        try {
+            const axiosResponse: AxiosResponse<BrowserJson>  = await axios.get(`http://127.0.0.1:${profile}/json/version`);
+            
+            return axiosResponse.data.webSocketDebuggerUrl;
+        } catch (error) {
+            return undefined;
+        }
+    }
+
+    private async startLoop(){
+        while (true){
+            const url = await this.getBrowserWebSocketUrl(this.profile);
+            if(url){
+                this.webSocketUrl = url;
+                await this.browserConnection();
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
+
+    private browserConnection(): Promise<void>{
+
+        return new Promise(resolve => {
+            this.socket = new WebSocket(this.webSocketUrl!);
+            this.socket.onopen = () => this.handleOpen();
+            this.socket.onmessage = (messageEvent: MessageEvent) => this.handleMessageFromBrowser(messageEvent.data);
+            this.socket.onerror = () => this.socket?.close();
+            this.socket.onclose = () => resolve();
+        });
+    }
+
+    private handleOpen(){
+        this.socket!.send(JSON.stringify({
+            id: 1,
+            method: "Target.setDiscoverTargets",
+            params: {
+                discover: true 
+            }
+        }));
+        this.giveMeTheTabs();
+    }
+    
+
+    public giveMeTheTabs(){
+        if(this.socket && this.socket.readyState === WebSocket.OPEN){
+            this.socket.send(JSON.stringify({
+                id: this.GET_TABS_ID,
+                method: "Target.getTargets",
+                params: {
+                    filter: [
+                        {
+                            type: "page",
+                            exclude: false
+                        }
+                    ]
+                }
+            }));
+        }
+    }
+
+    private handleMessageFromBrowser(data: WebSocket.Data): void {
+        try {
+            const message: GetTabsBrowserResponse | TabInfoChangedResponse | TabClosedResponse = 
+                typeof data === 'string' ? JSON.parse(data) : data as unknown as GetTabsBrowserResponse | TabInfoChangedResponse | TabClosedResponse;
+            
+            // Handle tab list response
+            if ('id' in message && message.id === this.GET_TABS_ID && message.result?.targetInfos) {
+                // Notify listeners with the new tab list
+                this.listeners.forEach(listener => listener(this.convertTabsObjects("all_tabs", message.result.targetInfos, this.profileName)));
+                return;
+            }
+
+            // Handle tab creation notification
+            if('method' in message && message.method === 'Target.targetCreated' && 'params' in message && 'targetInfo' in message.params){
+                const targetInfo = message.params.targetInfo;
+                if(targetInfo.type === 'page'){
+                    this.listeners.forEach(listener => listener(this.convertTabsObjects("new_tab", [targetInfo], this.profileName)));
+                }
+                return;
+            }
+
+            // Handle tab change notification
+            if ('method' in message && message.method === 'Target.targetInfoChanged' && 'targetInfo' in message.params) {
+                const targetInfo = message.params.targetInfo;
+                if (targetInfo.type === 'page') {
+                    
+                    this.listeners.forEach(listener => listener(this.convertTabsObjects("tab_info_change", [targetInfo], this.profileName)));
+                }
+                return;
+            }
+
+            // Handle tab close notification
+            if ('method' in message && message.method === 'Target.targetDestroyed' && 'targetId' in message.params) {
+                const targetId = message.params.targetId;
+                this.listeners.forEach(listener => listener(this.convertTabsObjects("tab_closed", [{targetId, type: "page", title: "", url: "", attached: false, canAccessOpener: false, browserContextId: "", pid: 0}], this.profileName)));
+                return;
+            }
+        } catch (error) {
+            return;
+        }
+    }
+
+    public registerCallback(callback: (event: BrowserTabEvent) => void): void {
+        this.listeners.push(callback);
+    }
+
+    public sendMessage(tabId: string, operation: string): void {
+        switch(operation){
+            case "close_tab":
+                this.closeTab(tabId);
+                break;
+            case "focus_tab":
+                this.focusTab(tabId);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private focusTab(tabId: string): void {
+        if(this.socket && this.socket.readyState === WebSocket.OPEN){
+            this.socket.send(JSON.stringify({
+                id: this.FOCUS_TAB_ID,
+                method: "Target.activateTarget",
+                params: {
+                    targetId: tabId
+                }
+            }));
+        }
+    }
+
+    private async closeTab(tabId: string): Promise<void> {
+        if(this.socket && this.socket.readyState === WebSocket.OPEN){
+            this.socket.send(JSON.stringify({
+                id: this.CLOSE_TAB_ID,
+                method: "Target.closeTarget",
+                params: {
+                    targetId: tabId
+                }
+            }));
+        }
+    }
+
+    private convertTabsObjects(eventType: string, tabsFromBrowser: TabsFromBrowser[], profile: string): BrowserTabEvent{
+        return {
+            type: eventType,
+            tabs: tabsFromBrowser.map((tab) => {
+                return {
+                    title: tab.title,
+                    tabId: tab.targetId,
+                    url: tab.url,
+                    favicon: ''
+                }
+            }),
+            profile: profile
+        }
+    }
+}
