@@ -2,6 +2,7 @@ import { action, Coordinates, JsonObject, KeyDownEvent, Logger, SingletonAction,
 import { PageSetter } from "./pageSetter";
 import { ConnectionToBrowser } from "../connectionToBrowser";
 import { BrowserTabEvent, Tab } from '../interfaces/tabs.interfaces';
+import { FaviconHandler } from "../faviconHandler";
 
 @action({UUID: "com.thedanielcer.tab-wizard.tabs-on-keys"})
 export class TabsOnKeys extends SingletonAction{
@@ -28,10 +29,10 @@ export class TabsOnKeys extends SingletonAction{
 
     public static async create(logger: Logger, pageCounter: PageSetter): Promise<TabsOnKeys> {
         const instance = new TabsOnKeys(logger, pageCounter);
-        instance.personalBrowserConnection = await ConnectionToBrowser.create("personal");
-        instance.workBrowserConnection = await ConnectionToBrowser.create("work");
-        instance.personalBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
-        instance.workBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
+        instance.personalBrowserConnection = await ConnectionToBrowser.create("personal", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
+        instance.workBrowserConnection = await ConnectionToBrowser.create("work", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
+        // instance.personalBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
+        // instance.workBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
         return instance;
     }
 

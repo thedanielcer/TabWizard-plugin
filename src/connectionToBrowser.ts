@@ -5,6 +5,7 @@ import { BrowserJson } from "./interfaces/browser-json.interface";
 import { TabsFromBrowser } from "./interfaces/tabs-in-browser.interface";
 import { GetTabsBrowserResponse, TabClosedResponse, TabInfoChangedResponse } from "./interfaces/browser-responses.interface";
 import { BrowserTabEvent, Tab } from "./interfaces/tabs.interfaces";
+import { FaviconHandler } from "./faviconHandler";
 
 export class ConnectionToBrowser{
     private socket?: WebSocket;
@@ -15,14 +16,16 @@ export class ConnectionToBrowser{
     private profile: number;
     private profileName: string;
     private webSocketUrl?: string;
+    private faviconHandler: FaviconHandler = new FaviconHandler;
 
     private constructor(profile: string) {
         this.profile = profile === "personal" ? config.debugPortPersonal : config.debugPortWork;
         this.profileName = profile;
     }
 
-    public static async create(profile: string): Promise<ConnectionToBrowser> {
+    public static async create(profile: string, listeners: Array<(event: BrowserTabEvent) => void>): Promise<ConnectionToBrowser> {
         const instance = new ConnectionToBrowser(profile);
+        listeners.forEach(listener => instance.registerCallback(listener));
         instance.startLoop();
         return instance;
     }
@@ -88,7 +91,7 @@ export class ConnectionToBrowser{
         }
     }
 
-    private handleMessageFromBrowser(data: WebSocket.Data): void {
+    private async handleMessageFromBrowser(data: WebSocket.Data): Promise<void> {
         try {
             const message: GetTabsBrowserResponse | TabInfoChangedResponse | TabClosedResponse = 
                 typeof data === 'string' ? JSON.parse(data) : data as unknown as GetTabsBrowserResponse | TabInfoChangedResponse | TabClosedResponse;
@@ -96,7 +99,7 @@ export class ConnectionToBrowser{
             // Handle tab list response
             if ('id' in message && message.id === this.GET_TABS_ID && message.result?.targetInfos) {
                 // Notify listeners with the new tab list
-                this.listeners.forEach(listener => listener(this.convertTabsObjects("all_tabs", message.result.targetInfos, this.profileName)));
+                this.listeners.forEach(async listener => listener(await this.convertTabsObjects("all_tabs", message.result.targetInfos, this.profileName)));
                 return;
             }
 
@@ -104,7 +107,7 @@ export class ConnectionToBrowser{
             if('method' in message && message.method === 'Target.targetCreated' && 'params' in message && 'targetInfo' in message.params){
                 const targetInfo = message.params.targetInfo;
                 if(targetInfo.type === 'page'){
-                    this.listeners.forEach(listener => listener(this.convertTabsObjects("new_tab", [targetInfo], this.profileName)));
+                    this.listeners.forEach(async listener => listener(await this.convertTabsObjects("new_tab", [targetInfo], this.profileName)));
                 }
                 return;
             }
@@ -114,7 +117,7 @@ export class ConnectionToBrowser{
                 const targetInfo = message.params.targetInfo;
                 if (targetInfo.type === 'page') {
                     
-                    this.listeners.forEach(listener => listener(this.convertTabsObjects("tab_info_change", [targetInfo], this.profileName)));
+                    this.listeners.forEach(async listener => listener(await this.convertTabsObjects("tab_info_change", [targetInfo], this.profileName)));
                 }
                 return;
             }
@@ -122,7 +125,7 @@ export class ConnectionToBrowser{
             // Handle tab close notification
             if ('method' in message && message.method === 'Target.targetDestroyed' && 'targetId' in message.params) {
                 const targetId = message.params.targetId;
-                this.listeners.forEach(listener => listener(this.convertTabsObjects("tab_closed", [{targetId, type: "page", title: "", url: "", attached: false, canAccessOpener: false, browserContextId: "", pid: 0}], this.profileName)));
+                this.listeners.forEach(async listener => listener(await this.convertTabsObjects("tab_closed", [{targetId, type: "page", title: "", url: "", attached: false, canAccessOpener: false, browserContextId: "", pid: 0}], this.profileName)));
                 return;
             }
         } catch (error) {
@@ -171,17 +174,19 @@ export class ConnectionToBrowser{
         }
     }
 
-    private convertTabsObjects(eventType: string, tabsFromBrowser: TabsFromBrowser[], profile: string): BrowserTabEvent{
+    private async convertTabsObjects(eventType: string, tabsFromBrowser: TabsFromBrowser[], profile: string): Promise<BrowserTabEvent>{
+        const tabs: Tab[] = [];
+        for(const tab of tabsFromBrowser){
+            const favicon = await this.faviconHandler.getFavicon(tab.url);
+            tabs.push({
+                title: tab.title,
+                tabId: tab.targetId,
+                url: tab.url,
+                favicon: favicon});
+        }
         return {
             type: eventType,
-            tabs: tabsFromBrowser.map((tab) => {
-                return {
-                    title: tab.title,
-                    tabId: tab.targetId,
-                    url: tab.url,
-                    favicon: ''
-                }
-            }),
+            tabs: tabs,
             profile: profile
         }
     }
