@@ -27,3 +27,10 @@ export interface TabCreatedResponse {
         targetInfo: TabsFromBrowser
     }
 }
+
+export interface TabInfoResponse {
+    id: number;
+    result: {
+        targetInfo: TabsFromBrowser
+    }
+}

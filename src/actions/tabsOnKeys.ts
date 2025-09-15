@@ -20,6 +20,7 @@ export class TabsOnKeys extends SingletonAction{
         "youtube",
         "chatgpt",
         "github",
+        "amazon",
     ];
 
     constructor(logger: Logger, private readonly pageCounter: PageSetter) {
@@ -29,8 +30,8 @@ export class TabsOnKeys extends SingletonAction{
 
     public static async create(logger: Logger, pageCounter: PageSetter): Promise<TabsOnKeys> {
         const instance = new TabsOnKeys(logger, pageCounter);
-        instance.personalBrowserConnection = await ConnectionToBrowser.create("personal", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
-        instance.workBrowserConnection = await ConnectionToBrowser.create("work", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
+        instance.personalBrowserConnection = await ConnectionToBrowser.create(logger, "personal", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
+        instance.workBrowserConnection = await ConnectionToBrowser.create(logger, "work", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
         // instance.personalBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
         // instance.workBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
         return instance;
@@ -95,8 +96,8 @@ export class TabsOnKeys extends SingletonAction{
             break;
 
             case "tab_info_change":
-                this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
                 if(this.isTabInArray(event.tabs[0], list)){
+                this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
                     setter(list.map((tab) => tab.tabId === event.tabs[0].tabId ? event.tabs[0] : tab));
                 } else {
                     setter([...list, event.tabs[0]]);
