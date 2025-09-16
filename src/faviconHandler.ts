@@ -30,6 +30,7 @@ export class FaviconHandler{
           this.getFaviconsToOverride(this.manualOverridesDirectory, {width: 100, height: 100}),
           this.getFaviconsToOverride(this.gitHubIconsDirectory, {width: 100, height: 100}),
         ]);
+        this.logger.debug('Favicons initialized');
       }
 
     async getFaviconsToOverride(
@@ -77,6 +78,11 @@ export class FaviconHandler{
 
     async getFavicon(fullUrl: string): Promise<string>{
         try{
+
+            if(fullUrl === 'edge://newtab/' && this.MANUAL_FAVICONS_OVERRIDES.has('new-tab')){
+                const override = this.MANUAL_FAVICONS_OVERRIDES.get('new-tab');
+                if (override) return override.base64String;
+            }
             // this.logger.debug(`getting favicon for ${fullUrl}`);
             const url = new URL(fullUrl);
             let domain = url.hostname.toLowerCase();
@@ -84,11 +90,6 @@ export class FaviconHandler{
 
             // this.logger.debug(`hostname: ${domain}`);
             if(domain === 'chatgpt.com') domain = 'chatgpt.co'
-
-            if(fullUrl === 'edge://newtab/' && this.MANUAL_FAVICONS_OVERRIDES.has('new-tab')){
-                const override = this.MANUAL_FAVICONS_OVERRIDES.get('new-tab');
-                if (override) return override.base64String;
-            }
 
             if(domain === 'github.com'){
                 const repoName = this.extractGithubRepoName(fullUrl);
@@ -126,10 +127,8 @@ export class FaviconHandler{
             );
 
             const imageBuffer = Buffer.from(rawFavicon.data);
-            const image = await sharp(imageBuffer).resize(100, 100, {
-                fit: "contain",
-                background: {r: 0, g: 0, b: 0, alpha: 0},
-            }).png().toBuffer();
+
+            const image = await this.renderIconCanvas(imageBuffer);
 
             const faviconBase64 = 'data:image/png;base64,' + image.toString("base64");
 
@@ -137,6 +136,10 @@ export class FaviconHandler{
 
             return faviconBase64;
         } catch (error) {
+            // const url = new URL(fullUrl);
+            // let domain = url.hostname.toLowerCase();
+            // if (domain.startsWith("www.")) domain = domain.slice(4);
+            // this.logger.error('Error getting favicon for domain ' + domain, error);
             return "";
         }
     }
@@ -216,5 +219,45 @@ export class FaviconHandler{
 
     filenameWithoutExtension(filename: string): string{
         return path.basename(filename, path.extname(filename));
+    }
+
+    async renderIconCanvas(
+        buffer: Buffer,
+        canvasSize = 100,
+        iconRatio = 0.8,
+        cornerRadius = 20,
+    ): Promise<Buffer>{
+        const innerSize = canvasSize * iconRatio;
+
+        const innerIcon = await sharp(buffer)
+                                .resize(
+                                    innerSize,
+                                    innerSize, {
+                                        fit: "inside",
+                                        withoutEnlargement: true,
+                                }).png()
+                                .toBuffer();
+
+        const svg = Buffer.from(
+          `<svg width="${innerSize}" height="${innerSize}">
+             <rect x="0" y="0" width="${innerSize}" height="${innerSize}" rx="${cornerRadius}" ry="${cornerRadius}" />
+           </svg>`
+        );
+
+        const roundedIcon = await sharp(innerIcon)
+                                .composite([{input: svg, blend: "dest-in"}])
+                                .png()
+                                .toBuffer();
+
+        const canvas = await sharp({
+            create: {
+                width: canvasSize,
+                height: canvasSize,
+                channels: 4,
+                background: {r: 0, g: 0, b: 0, alpha: 0}
+            },
+        }).composite([{input: roundedIcon, gravity: "center"}]).png().toBuffer();
+
+        return canvas;
     }
 }

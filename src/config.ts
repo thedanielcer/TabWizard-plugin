@@ -17,7 +17,7 @@ export const config: Config = {
     // backendUrl: process.env.BACKEND_URL || 'ws://127.0.0.1:8766',
     debugPortPersonal: process.env.DEBUG_PORT_PERSONAL as unknown as number || 9223,
     debugPortWork: process.env.DEBUG_PORT_WORK as unknown as number || 9222,
-    manualOverridesDirectory: process.env.MANUAL_OVERRIDES_DIRECTORY || "D:\Pictures\Icons\Tab Wizard Manual Overrides",
-    gitHubIconsDirectory: process.env.GITHUB_ICONS_DIRECTORY || "D:\Pictures\Icons\GitHub Icons",
+    manualOverridesDirectory: process.env.MANUAL_OVERRIDES_DIRECTORY || "D:/Pictures/Icons/Tab Wizard Manual Overrides",
+    gitHubIconsDirectory: process.env.GITHUB_ICONS_DIRECTORY || "D:/Pictures/Icons/GitHub Icons",
     // Add other configuration variables here as needed
 };
