@@ -19,6 +19,8 @@ export class TabsOnKeys extends SingletonAction{
     private readonly priorityDomains = [
         "youtube",
         "chatgpt",
+        "disneyplus",
+        "hbomax",
         "github",
         "amazon",
     ];
@@ -32,8 +34,6 @@ export class TabsOnKeys extends SingletonAction{
         const instance = new TabsOnKeys(logger, pageCounter);
         instance.personalBrowserConnection = await ConnectionToBrowser.create(logger, "personal", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
         instance.workBrowserConnection = await ConnectionToBrowser.create(logger, "work", [(event: BrowserTabEvent) => instance.handleBackendEvent(event)]);
-        // instance.personalBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
-        // instance.workBrowserConnection.registerCallback((event: BrowserTabEvent) => instance.handleBackendEvent(event));
         return instance;
     }
 

@@ -136,10 +136,13 @@ export class FaviconHandler{
 
             return faviconBase64;
         } catch (error) {
-            // const url = new URL(fullUrl);
-            // let domain = url.hostname.toLowerCase();
-            // if (domain.startsWith("www.")) domain = domain.slice(4);
-            // this.logger.error('Error getting favicon for domain ' + domain, error);
+
+            if(this.MANUAL_FAVICONS_OVERRIDES.has('no-icon')){
+                const override = this.MANUAL_FAVICONS_OVERRIDES.get('no-icon');
+                if (override){
+                    return override.base64String;
+                }
+            }
             return "";
         }
     }
