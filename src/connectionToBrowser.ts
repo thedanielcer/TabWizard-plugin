@@ -32,7 +32,8 @@ export class ConnectionToBrowser{
         listeners.forEach(listener => instance.registerCallback(listener));
         instance.startLoop();
         instance.logger = logger;
-        instance.faviconHandler = new FaviconHandler(logger);
+        instance.faviconHandler = new FaviconHandler(logger, config.manualOverridesDirectory, config.gitHubIconsDirectory);
+        instance.faviconHandler.init();
         return instance;
     }
 

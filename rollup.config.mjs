@@ -21,6 +21,7 @@ const config = {
 			return url.pathToFileURL(path.resolve(path.dirname(sourcemapPath), relativeSourcePath)).href;
 		}
 	},
+	external: ["sharp", "@img/sharp-win32-x64", "@img/sharp-wasm32"],
 	plugins: [
 		{
 			name: "watch-externals",
@@ -37,7 +38,7 @@ const config = {
 			exportConditions: ["node"],
 			preferBuiltins: true
 		}),
-		commonjs(),
+		commonjs({ ignoreDynamicRequires: true }),
 		!isWatching && terser(),
 		{
 			name: "emit-module-package-file",
