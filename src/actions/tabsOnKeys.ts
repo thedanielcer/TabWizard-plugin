@@ -24,6 +24,15 @@ export class TabsOnKeys extends SingletonAction{
         "github",
         "amazon",
     ];
+    private readonly blockedUrls = [
+        "edge://discover-chat-v2/",
+        "edge://history/hub",
+        "edge://downloads/hub",
+        "edge://favorites/hub.html",
+        "edge://e-drop/",
+        "edge://performance-center/hub",
+        "edge://shopping/",
+    ];
 
     constructor(logger: Logger, private readonly pageCounter: PageSetter) {
         super();
@@ -77,16 +86,22 @@ export class TabsOnKeys extends SingletonAction{
         switch (event.type) {
             case "all_tabs":
                 this.logger.info(`Set current tabs for ${event.profile}: ${event.tabs.length}`);
-                setter(event.tabs);
+                const filteredTabs = event.tabs.filter((tab) => tab.url && !this.blockedUrls.includes(tab.url));
+                setter(filteredTabs);
             break;
     
             case "new_tab":
+                // if the tab is blocked, don't add it to the list
                 this.logger.info(`New tab for ${event.profile}: ${event.tabs[0].tabId}`);
+
+                if(event.tabs[0].url && this.blockedUrls.includes(event.tabs[0].url)) return;
                 setter([...list, event.tabs[0]]);
-                // this.logger.info(`list after event: ${JSON.stringify(this.tabsArrayPersonal)}`);
             break;
     
-            case "tab_closed":
+                case "tab_closed":
+                    // if the tab is blocked, don't remove it from the list
+                if(event.tabs[0].url && this.blockedUrls.includes(event.tabs[0].url)) return;
+
                 this.logger.info(`Tab closed for ${event.profile}: ${event.tabs[0].tabId}`);
                 setter(list.filter((t) => t.tabId !== event.tabs[0].tabId));
                 const maxPersonal = Math.floor((this.tabsArrayPersonal.length - 1) / this.maxKeysPerPage);
@@ -96,10 +111,16 @@ export class TabsOnKeys extends SingletonAction{
             break;
 
             case "tab_info_change":
+                // if the tab is blocked, don't add it to the list
+                if(event.tabs[0].url && this.blockedUrls.includes(event.tabs[0].url)) return;
+
+                // if the tab is already in the list, update it
                 if(this.isTabInArray(event.tabs[0], list)){
-                this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
+                    // if the tab is in the list, update it
+                    this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
                     setter(list.map((tab) => tab.tabId === event.tabs[0].tabId ? event.tabs[0] : tab));
                 } else {
+                    // if the tab is not in the list, add it
                     setter([...list, event.tabs[0]]);
                 }
                 break;
