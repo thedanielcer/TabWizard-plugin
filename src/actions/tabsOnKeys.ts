@@ -3,6 +3,8 @@ import { PageSetter } from "./pageSetter";
 import { ConnectionToBrowser } from "../connectionToBrowser";
 import { BrowserTabEvent, Tab } from '../interfaces/tabs.interfaces';
 import { FaviconHandler } from "../faviconHandler";
+import { blockedUrls } from "../interfaces/blocked-urls";
+
 
 @action({UUID: "com.thedanielcer.tab-wizard.tabs-on-keys"})
 export class TabsOnKeys extends SingletonAction{
@@ -24,15 +26,7 @@ export class TabsOnKeys extends SingletonAction{
         "github",
         "amazon",
     ];
-    private readonly blockedUrls = [
-        "edge://discover-chat-v2/",
-        "edge://history/hub",
-        "edge://downloads/hub",
-        "edge://favorites/hub.html",
-        "edge://e-drop/",
-        "edge://performance-center/hub",
-        "edge://shopping/",
-    ];
+    private readonly blockedUrls = blockedUrls;
 
     constructor(logger: Logger, private readonly pageCounter: PageSetter) {
         super();
@@ -92,7 +86,7 @@ export class TabsOnKeys extends SingletonAction{
     
             case "new_tab":
                 // if the tab is blocked, don't add it to the list
-                this.logger.info(`New tab for ${event.profile}: ${event.tabs[0].tabId}`);
+                // this.logger.info(`New tab for ${event.profile}: ${event.tabs[0].tabId}`);
 
                 if(event.tabs[0].url && this.blockedUrls.includes(event.tabs[0].url)) return;
                 setter([...list, event.tabs[0]]);
@@ -102,7 +96,7 @@ export class TabsOnKeys extends SingletonAction{
                     // if the tab is blocked, don't remove it from the list
                 if(event.tabs[0].url && this.blockedUrls.includes(event.tabs[0].url)) return;
 
-                this.logger.info(`Tab closed for ${event.profile}: ${event.tabs[0].tabId}`);
+                // this.logger.info(`Tab closed for ${event.profile}: ${event.tabs[0].tabId}`);
                 setter(list.filter((t) => t.tabId !== event.tabs[0].tabId));
                 const maxPersonal = Math.floor((this.tabsArrayPersonal.length - 1) / this.maxKeysPerPage);
                 const maxWork     = Math.floor((this.tabsArrayWork.length - 1) / this.maxKeysPerPage);
@@ -117,7 +111,7 @@ export class TabsOnKeys extends SingletonAction{
                 // if the tab is already in the list, update it
                 if(this.isTabInArray(event.tabs[0], list)){
                     // if the tab is in the list, update it
-                    this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
+                    // this.logger.info(`Tab info change for ${event.profile}: ${event.tabs[0].tabId}`);
                     setter(list.map((tab) => tab.tabId === event.tabs[0].tabId ? event.tabs[0] : tab));
                 } else {
                     // if the tab is not in the list, add it
@@ -134,7 +128,7 @@ export class TabsOnKeys extends SingletonAction{
     }
 
     override onWillAppear(ev: WillAppearEvent<JsonObject>): Promise<void> | void {
-        this.logger.info('onWillAppear happened');
+        // this.logger.info('onWillAppear happened');
         this.personalBrowserConnection.giveMeTheTabs();
         this.workBrowserConnection.giveMeTheTabs();
         if(!ev.action.coordinates) return;
@@ -165,7 +159,7 @@ export class TabsOnKeys extends SingletonAction{
     }
 
     private renderPage(): void {
-        this.logger.info('Rendering page');
+        // this.logger.info('Rendering page');
         for (const action of this.actions){
             if (!action.isKey() || !action.coordinates) continue;
             const { row, column } = action.coordinates;
@@ -226,7 +220,7 @@ export class TabsOnKeys extends SingletonAction{
 
         const tab = list[idx];
         const profile = isPersonal ? "personal" : "work";
-        this.logger.info(`profile: ${profile}`);
+        // this.logger.info(`profile: ${profile}`);
         if(!tab.tabId) return;
         if(isPersonal) this.personalBrowserConnection.sendMessage(tab.tabId, "close_tab");
         else this.workBrowserConnection.sendMessage(tab.tabId, "close_tab");

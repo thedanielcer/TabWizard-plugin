@@ -7,7 +7,7 @@ import { GetTabsBrowserResponse, TabClosedResponse, TabInfoChangedResponse, TabI
 import { BrowserTabEvent, Tab } from "./interfaces/tabs.interfaces";
 import { FaviconHandler } from "./faviconHandler";
 import { Logger } from "@elgato/streamdeck";
-import { time } from "console";
+import { blockedUrls } from "./interfaces/blocked-urls";
 
 export class ConnectionToBrowser{
     private socket?: WebSocket;
@@ -21,6 +21,7 @@ export class ConnectionToBrowser{
     private webSocketUrl?: string;
     private faviconHandler!: FaviconHandler; // = new FaviconHandler;
     private logger!: Logger;
+    private blockedUrls = blockedUrls;
 
     private constructor(profile: string) {
         this.profile = profile === "personal" ? config.debugPortPersonal : config.debugPortWork;
@@ -107,7 +108,8 @@ export class ConnectionToBrowser{
             if ('id' in message && message.id === this.GET_TABS_ID && 'result' in message && 'targetInfos' in message.result) {
                 const targetInfos = message.result.targetInfos;
                 // Notify listeners with the new tab list
-                this.listeners.forEach(async listener => listener(await this.convertTabsObjects("all_tabs", targetInfos, this.profileName)));
+                const filteredTabs = targetInfos.filter((tab) => tab.url && !blockedUrls.includes(tab.url));
+                this.listeners.forEach(async listener => listener(await this.convertTabsObjects("all_tabs", filteredTabs, this.profileName)));
                 return;
             }
 
@@ -115,7 +117,9 @@ export class ConnectionToBrowser{
             if('method' in message && message.method === 'Target.targetCreated' && 'params' in message && 'targetInfo' in message.params){
                 const targetInfo = message.params.targetInfo;
                 if(targetInfo.type === 'page'){
-                    this.listeners.forEach(async listener => listener(await this.convertTabsObjects("new_tab", [targetInfo], this.profileName)));
+                    if(targetInfo.url && !blockedUrls.includes(targetInfo.url)){
+                        this.listeners.forEach(async listener => listener(await this.convertTabsObjects("new_tab", [targetInfo], this.profileName)));
+                    }
                 }
                 return;
             }
@@ -144,7 +148,7 @@ export class ConnectionToBrowser{
             if ('id' in message && message.id === this.GET_TAB_INFO_ID && 'result' in message && 'targetInfo' in message.result) {
                 const targetInfo = message.result.targetInfo;
                 // Notify listeners with the new tab info
-                this.logger.debug('sending tab info change - new tab name: ' + targetInfo.title);
+                // this.logger.debug('sending tab info change - new tab name: ' + targetInfo.title);
                 this.listeners.forEach(async listener => listener(await this.convertTabsObjects("tab_info_change", [targetInfo], this.profileName)));
                 return;
             }
@@ -195,7 +199,7 @@ export class ConnectionToBrowser{
     }
 
     private getTabInfo(tabId: string): void {
-        this.logger.debug('getting tab info');
+        // this.logger.debug('getting tab info');
         if(this.socket && this.socket.readyState === WebSocket.OPEN){
             this.socket.send(JSON.stringify({
                 id: this.GET_TAB_INFO_ID,
@@ -212,7 +216,7 @@ export class ConnectionToBrowser{
             title: tab.title,
             tabId: tab.targetId,
             url: tab.url,
-            favicon: await this.faviconHandler.getFavicon(tab.url)
+            favicon: await this.faviconHandler.getFavicon(tab.url, this.profile)
         })));
         return {
             type: eventType,

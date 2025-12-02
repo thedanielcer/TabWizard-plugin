@@ -1,8 +1,10 @@
 import { Logger } from "@elgato/streamdeck";
-import axios from "axios";
+import axios, { AxiosResponse } from "axios";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { BrowserJson, BrowserJsonList } from "./interfaces/browser-json.interface";
+import { randomUUID } from "node:crypto";
 
 type Size = {width: number, height: number};
 type manualFaviconsOverridesType = {
@@ -16,7 +18,7 @@ export class FaviconHandler{
     private gitHubIconsDirectory: string;
     private MANUAL_FAVICONS_OVERRIDES = new Map<string, manualFaviconsOverridesType>();
     private FAVICONS_FOR_GITHUB = new Map<string, manualFaviconsOverridesType>();
-    private SUPPORTED_EXTENSIONS = new Set ([".png", ".jpg", ".jpeg", ".webp"]);
+    private SUPPORTED_EXTENSIONS = new Set ([".png", ".jpg", ".jpeg", ".webp", ".svg"]);
     private faviconCache = new Map<string, manualFaviconsOverridesType>();
 
     constructor (logger: Logger, manualOverridesDirectory: string, gitHubIconsDirectory: string){
@@ -76,8 +78,10 @@ export class FaviconHandler{
         );
     }
 
-    async getFavicon(fullUrl: string): Promise<string>{
+    async getFavicon(fullUrl: string, profile: number): Promise<string>{
         try{
+
+            const loggerTrace = randomUUID();
 
             if(fullUrl === 'edge://newtab/' && this.MANUAL_FAVICONS_OVERRIDES.has('new-tab')){
                 const override = this.MANUAL_FAVICONS_OVERRIDES.get('new-tab');
@@ -98,7 +102,10 @@ export class FaviconHandler{
                     return gh ? gh.base64String : "";
                 }
                 const repoIcon = this.FAVICONS_FOR_GITHUB.get(repoName);
-                if(repoIcon) return repoIcon.base64String;
+                if(repoIcon) {
+                    this.logger.debug(`[${loggerTrace}] favicon from github manual overrides ${domain}`);
+                    return repoIcon.base64String;
+                }
             }
 
             if(this.MANUAL_FAVICONS_OVERRIDES.has(domain)){
@@ -109,6 +116,7 @@ export class FaviconHandler{
                     if (mtimeMs !== override.mtimeMs){
                         return await this.updateManualFaviconsOverrides(domain);
                     }
+                    this.logger.debug(`[${loggerTrace}] favicon from manual overrides ${domain}`);
                     return override.base64String;
                 }
                     
@@ -116,10 +124,23 @@ export class FaviconHandler{
 
             if(this.faviconCache.has(domain)){
                 const cached = this.faviconCache.get(domain);
-                if (cached) return cached.base64String;
+                if (cached) {
+                    this.logger.debug(`[${loggerTrace}] favicon from cache ${domain} for url ${fullUrl}`);
+                    return cached.base64String;
+                }
             }
 
-            this.logger.debug('making request for favicon for url ' + domain);
+            const faviconUrl = await this.getFaviconUrl(profile, fullUrl);
+            if (faviconUrl) {
+                const favicon = await this.getFaviconFromUrl(faviconUrl);
+                if (favicon) {
+                    this.faviconCache.set(domain, {mtimeMs: new Date().getTime(), base64String: favicon});
+                    this.logger.debug(`[${loggerTrace}] favicon from faviconUrl ${domain} for url ${fullUrl}`);
+                    return favicon;
+                }
+            }
+
+            this.logger.debug(`[${loggerTrace}] making request on img.logo.dev for favicon for url ${domain} for url ${fullUrl}`);
 
             const rawFavicon = await axios.get<ArrayBuffer>(
                 `https://img.logo.dev/${domain}?token=pk_Gb5xYqzMT2KthP8ESZj36g&size=144&format=png&retina=true`,
@@ -133,6 +154,8 @@ export class FaviconHandler{
             const faviconBase64 = 'data:image/png;base64,' + image.toString("base64");
 
             this.faviconCache.set(domain, {mtimeMs: new Date().getTime(), base64String: faviconBase64});
+
+            this.logger.debug(`[${loggerTrace}] favicon from img.logo.dev ${domain} for url ${fullUrl}`);
 
             return faviconBase64;
         } catch (error) {
@@ -232,7 +255,7 @@ export class FaviconHandler{
     ): Promise<Buffer>{
         const innerSize = canvasSize * iconRatio;
 
-        const innerIcon = await sharp(buffer)
+        const innerIcon = await sharp(buffer, {density: 192})
                                 .resize(
                                     innerSize,
                                     innerSize, {
@@ -262,5 +285,56 @@ export class FaviconHandler{
         }).composite([{input: roundedIcon, gravity: "center"}]).png().toBuffer();
 
         return canvas;
+    }
+
+    private async getFaviconUrl(profile: number, url: string){
+        try {
+            const axiosResponse: AxiosResponse<BrowserJsonList[]>  = await axios.get(`http://127.0.0.1:${profile}/json`);
+            const faviconUrl = axiosResponse.data.find((list) => list.url === url)?.faviconUrl;
+            if(faviconUrl){
+                return faviconUrl;
+            }
+
+            return undefined;
+        } catch (error) {
+            return undefined;
+        }
+    }
+
+    private async getFaviconFromUrl(faviconUrl: string){
+
+        const rawFavicon = await axios.get<ArrayBuffer>(
+            `${faviconUrl}`,
+            {headers: { "User-Agent": "Mozilla/5.0" }, responseType: "arraybuffer" }
+        );
+
+        const contentType = (rawFavicon.headers['content-type'] || '').toLowerCase();
+
+        if(contentType.includes('image/png') || faviconUrl.endsWith('.png')){
+            const imageBuffer = Buffer.from(rawFavicon.data);
+            const size = await this.getFaviconSize(imageBuffer);
+
+            if(size.width > 100 || size.height > 100){
+                const pngBuffer = await this.renderIconCanvas(imageBuffer);
+                const image = await this.renderIconCanvas(pngBuffer);
+                const faviconBase64 = 'data:image/png;base64,' + image.toString("base64");
+                return faviconBase64;
+            }
+            return false;
+        }
+
+        if(contentType.includes('image/svg+xml') || contentType.includes('image/svg') || faviconUrl.endsWith('.svg')){
+            const svgBuffer = Buffer.from(rawFavicon.data); //new TextDecoder('utf-8').decode(rawFavicon.data);
+            const image = await this.renderIconCanvas(svgBuffer);
+            const faviconBase64 = 'data:image/png;base64,' + image.toString("base64");
+            return faviconBase64;
+        }
+
+        return false;
+    }
+
+    private async getFaviconSize(faviconBuffer: Buffer){
+        const imageMetadata = await sharp(faviconBuffer).metadata();
+        return {width: imageMetadata.width, height: imageMetadata.height};
     }
 }
