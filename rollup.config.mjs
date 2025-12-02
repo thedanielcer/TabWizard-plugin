@@ -4,6 +4,7 @@ import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import path from "node:path";
 import url from "node:url";
+import json from "@rollup/plugin-json";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
 const sdPlugin = "com.thedanielcer.tab-wizard.sdPlugin";
@@ -20,6 +21,7 @@ const config = {
 			return url.pathToFileURL(path.resolve(path.dirname(sourcemapPath), relativeSourcePath)).href;
 		}
 	},
+	external: ["sharp", "@img/sharp-win32-x64", "@img/sharp-wasm32"],
 	plugins: [
 		{
 			name: "watch-externals",
@@ -30,12 +32,13 @@ const config = {
 		typescript({
 			mapRoot: isWatching ? "./" : undefined
 		}),
+		json(),
 		nodeResolve({
 			browser: false,
 			exportConditions: ["node"],
 			preferBuiltins: true
 		}),
-		commonjs(),
+		commonjs({ ignoreDynamicRequires: true }),
 		!isWatching && terser(),
 		{
 			name: "emit-module-package-file",
