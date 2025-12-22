@@ -103,7 +103,7 @@ export class FaviconHandler{
                 }
                 const repoIcon = this.FAVICONS_FOR_GITHUB.get(repoName);
                 if(repoIcon) {
-                    this.logger.debug(`[${loggerTrace}] favicon from github manual overrides ${domain}`);
+                    // this.logger.debug(`[${loggerTrace}] favicon from github manual overrides ${domain}`);
                     return repoIcon.base64String;
                 }
             }
@@ -116,7 +116,7 @@ export class FaviconHandler{
                     if (mtimeMs !== override.mtimeMs){
                         return await this.updateManualFaviconsOverrides(domain);
                     }
-                    this.logger.debug(`[${loggerTrace}] favicon from manual overrides ${domain}`);
+                    // this.logger.debug(`[${loggerTrace}] favicon from manual overrides ${domain}`);
                     return override.base64String;
                 }
                     
@@ -125,7 +125,7 @@ export class FaviconHandler{
             if(this.faviconCache.has(domain)){
                 const cached = this.faviconCache.get(domain);
                 if (cached) {
-                    this.logger.debug(`[${loggerTrace}] favicon from cache ${domain} for url ${fullUrl}`);
+                    // this.logger.debug(`[${loggerTrace}] favicon from cache ${domain} for url ${fullUrl}`);
                     return cached.base64String;
                 }
             }
@@ -135,12 +135,12 @@ export class FaviconHandler{
                 const favicon = await this.getFaviconFromUrl(faviconUrl);
                 if (favicon) {
                     this.faviconCache.set(domain, {mtimeMs: new Date().getTime(), base64String: favicon});
-                    this.logger.debug(`[${loggerTrace}] favicon from faviconUrl ${domain} for url ${fullUrl}`);
+                    // this.logger.debug(`[${loggerTrace}] favicon from faviconUrl ${domain} for url ${fullUrl}`);
                     return favicon;
                 }
             }
 
-            this.logger.debug(`[${loggerTrace}] making request on img.logo.dev for favicon for url ${domain} for url ${fullUrl}`);
+            // this.logger.debug(`[${loggerTrace}] making request on img.logo.dev for favicon for url ${domain} for url ${fullUrl}`);
 
             const rawFavicon = await axios.get<ArrayBuffer>(
                 `https://img.logo.dev/${domain}?token=pk_Gb5xYqzMT2KthP8ESZj36g&size=144&format=png&retina=true`,
@@ -155,7 +155,7 @@ export class FaviconHandler{
 
             this.faviconCache.set(domain, {mtimeMs: new Date().getTime(), base64String: faviconBase64});
 
-            this.logger.debug(`[${loggerTrace}] favicon from img.logo.dev ${domain} for url ${fullUrl}`);
+            // this.logger.debug(`[${loggerTrace}] favicon from img.logo.dev ${domain} for url ${fullUrl}`);
 
             return faviconBase64;
         } catch (error) {

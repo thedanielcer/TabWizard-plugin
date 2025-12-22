@@ -4,6 +4,12 @@ import { ConnectionToBrowser } from "../connectionToBrowser";
 import { BrowserTabEvent, Tab } from '../interfaces/tabs.interfaces';
 import { FaviconHandler } from "../faviconHandler";
 import { blockedUrls } from "../interfaces/blocked-urls";
+import { exec } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+
+// Resolve alongside the bundled plugin (bin/plugin.js => bin/ps1/focus-edge.ps1)
+const focusEdgeScriptPath = fileURLToPath(new URL("./ps1/focus-edge.ps1", import.meta.url));
 
 
 @action({UUID: "com.thedanielcer.tab-wizard.tabs-on-keys"})
@@ -79,7 +85,7 @@ export class TabsOnKeys extends SingletonAction{
     
         switch (event.type) {
             case "all_tabs":
-                this.logger.info(`Set current tabs for ${event.profile}: ${event.tabs.length}`);
+                // this.logger.info(`Set current tabs for ${event.profile}: ${event.tabs.length}`);
                 const filteredTabs = event.tabs.filter((tab) => tab.url && !this.blockedUrls.includes(tab.url));
                 setter(filteredTabs);
             break;
@@ -128,7 +134,7 @@ export class TabsOnKeys extends SingletonAction{
     }
 
     override onWillAppear(ev: WillAppearEvent<JsonObject>): Promise<void> | void {
-        // this.logger.info('onWillAppear happened');
+        this.logger.info('onWillAppear happened');
         this.personalBrowserConnection.giveMeTheTabs();
         this.workBrowserConnection.giveMeTheTabs();
         if(!ev.action.coordinates) return;
@@ -154,6 +160,7 @@ export class TabsOnKeys extends SingletonAction{
 
         const tab = list[idx]!;
         if(!tab.tabId) return;
+        this.focusTabWindow(isPersonalRow ? "personal" : "work");
         if(isPersonalRow) this.personalBrowserConnection.sendMessage(tab.tabId, "focus_tab");
         else this.workBrowserConnection.sendMessage(tab.tabId, "focus_tab");
     }
@@ -232,5 +239,31 @@ export class TabsOnKeys extends SingletonAction{
 
     private isTabInArray(tab: Tab, array: Tab[]): boolean {
         return array.some((t) => t.tabId === tab.tabId);
+    }
+
+    private focusTabWindow(profile: string): void {
+        this.logger.info(`Focusing tab window for ${profile}`);
+        const titlePart = profile === "work" ? "work debug" : "personal";
+
+        // NOTE: includes zero-width space between "microsoft" and "edge"
+        const edgeTitle = `${titlePart} - microsoft\u200b edge`;
+
+        if (!existsSync(focusEdgeScriptPath)) {
+            this.logger.error(`Focus script missing at ${focusEdgeScriptPath}`);
+            return;
+        }
+
+        exec(
+            `powershell -NoProfile -ExecutionPolicy Bypass -File "${focusEdgeScriptPath}" -EdgeTitle "${edgeTitle}"`,
+            { windowsHide: true },
+            (error, _stdout, stderr) => {
+                if (error) {
+                    const message = stderr?.trim() || error.message || "Failed to focus Edge window";
+                    this.logger.error(message);
+                } else {
+                    this.logger.debug("Edge window activated");
+                }
+            }
+        );
     }
 }
